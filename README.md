@@ -10,13 +10,12 @@ Tool used to update automatically the IPs on [dynv6.com](https://dynv6.com/)
 - Press Win+R and write shell:startup and add a shortcut of autoddns.pyw
 
 Enjoy your full automatic DDNS updater!
-
-It has a GUI to update manually, stop and restart the loop of checks!
+<p align="center">
+It has a GUI to update manually, stop and restart the loop of checks!<br>
 You can open it by just clicking the icon on the tray icon!
+</p>
+<p align="center">
+<img align="center" src="https://user-images.githubusercontent.com/75573680/204100338-b37b3e37-af4f-49de-bca2-a4a0064c6537.png?raw=true" alt="APP GUI" width="350" />
+</p>
 
-[Immagine 2022-11-26 180248](https://user-images.githubusercontent.com/75573680/204100338-b37b3e37-af4f-49de-bca2-a4a0064c6537.png)
-
-
-
-
-•This is my first GUI with python, so dont look at the code XD
+<p align="center">•This is my first GUI with python, so dont look at the code XD</p>
