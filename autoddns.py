@@ -20,8 +20,9 @@ def mainDDNS(ipv4, ipv6):
     print("---------------------------")
     print(">> Initialized IPv4: " + ipv4)
     print("--                      ---")
-    print(">> Initialized IPv6: " + ipv6)
-    print("---------------------------")
+    if ipv6 != None:
+        print(">> Initialized IPv6: " + ipv6)
+        print("---------------------------")
     #make the get request
     if ipv6 != None:
         x = urlopen(url + "?hostname=" + zone + "&ipv4=" + ipv4 + "&ipv6="  + ipv6 + "&token=" + token)
