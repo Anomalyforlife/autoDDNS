@@ -17,7 +17,8 @@ def getIPv6():
     except Exception as e:
         print(f">> Failed to get IP from http://v6.ipv6-test.com/api/myip.php: {e}")
         ipv6 = None
-    if ":" not in ipv6:  # Basic check to see if it's a valid IPv6 address
-        print(">> Detected IPv6 does not appear to be valid.")
-        ipv6 = None
+    if ipv6:
+        if ":" not in ipv6:  # Basic check to see if it's a valid IPv6 address
+            print(">> Detected IPv6 does not appear to be valid.")
+            ipv6 = None
     return ipv6
