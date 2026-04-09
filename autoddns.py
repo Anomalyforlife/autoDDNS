@@ -2,11 +2,17 @@
 import os
 import re
 import time
+from datetime import datetime
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from dotenv import load_dotenv
+
+
+def log(message):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] {message}", flush=True)
 
 
 def load_settings():
@@ -132,7 +138,8 @@ def create_dns_record(api_token, zone_id, record_name, ip_address, ttl, proxied)
         "proxied": proxied,
     }
     record = cf_request("POST", f"/zones/{zone_id}/dns_records", api_token, payload=payload)
-    print(f"Creato record A {record_name} -> {ip_address} (proxy={'ON' if proxied else 'OFF'})")
+    log(f"Creato record A {record_name} -> {ip_address} (proxy={'ON' if proxied else 'OFF'})")
+    return record
     return record
 
 
@@ -145,7 +152,8 @@ def update_dns_record(api_token, zone_id, record_id, record_name, ip_address, tt
         "proxied": proxied,
     }
     record = cf_request("PUT", f"/zones/{zone_id}/dns_records/{record_id}", api_token, payload=payload)
-    print(f"Aggiornato record A {record_name} -> {ip_address} (proxy={'ON' if proxied else 'OFF'})")
+    log(f"Aggiornato record A {record_name} -> {ip_address} (proxy={'ON' if proxied else 'OFF'})")
+    return record
     return record
 
 
@@ -156,7 +164,7 @@ def main():
     try:
         while True:
             public_ip = fetch_public_ipv4(ip_check_url)
-            print(f"IP pubblico rilevato: {public_ip}")
+            log(f"IP pubblico rilevato: {public_ip}")
 
             current_record = get_dns_record(api_token, zone_id, record_name)
 
@@ -168,7 +176,7 @@ def main():
                 current_ttl = current_record.get("ttl")
 
                 if current_ip == public_ip and current_proxied == proxied and current_ttl == ttl:
-                    print("Il record è già aggiornato. Nessuna modifica necessaria.")
+                    log("Il record è già aggiornato. Nessuna modifica necessaria.")
                 else:
                     update_dns_record(
                         api_token,
@@ -180,10 +188,10 @@ def main():
                         proxied,
                     )
 
-            print(f"Prossimo controllo tra {check_interval} secondi...\n")
+            log(f"Prossimo controllo tra {check_interval} secondi...")
             time.sleep(check_interval)
     except KeyboardInterrupt:
-        print("Interrotto dall'utente. Uscita.")
+        log("Interrotto dall'utente. Uscita.")
 
 
 if __name__ == "__main__":
