@@ -14,7 +14,9 @@ def load_settings():
     if os.path.isfile(env_path):
         load_dotenv(dotenv_path=env_path, override=False)
 
-    api_token = os.getenv("CLOUDFLARE_API", "").strip()
+    api_token = os.getenv("CLOUDFLARE_API_TOKEN", "").strip() or os.getenv("CLOUDFLARE_API", "").strip()
+    api_key = os.getenv("CLOUDFLARE_API_KEY", "").strip()
+    api_email = os.getenv("CLOUDFLARE_EMAIL", "").strip()
     record_name = os.getenv("RECORD_TO_EDIT", "").strip()
     zone_name = os.getenv("ZONE_NAME", "").strip()
     ip_check_url = os.getenv("IP_CHECK_URL", "https://api.ipify.org").strip()
@@ -22,11 +24,21 @@ def load_settings():
     proxy_value = os.getenv("PROXY", "true").strip().lower()
     interval_value = os.getenv("CHECK_INTERVAL", "300").strip()
 
-    if not api_token:
-        raise SystemExit("Errore: manca CLOUDFLARE_API in credentials.env")
+    if api_key and api_email:
+        auth = {"type": "key", "key": api_key, "email": api_email}
+        print(f"[DEBUG] Auth: API Key mode (email: {api_email})")
+    elif api_token:
+        auth = {"type": "token", "value": api_token}
+        token_preview = f"...{api_token[-10:]}" if len(api_token) > 10 else "token_short"
+        print(f"[DEBUG] Auth: Token mode (token: {token_preview}, length: {len(api_token)})")
+    else:
+        print("[DEBUG] No credentials found")
+        raise SystemExit(
+            "Errore: manca CLOUDFLARE_API_TOKEN/CLOUDFLARE_API oppure CLOUDFLARE_API_KEY e CLOUDFLARE_EMAIL"
+        )
 
     if not record_name:
-        raise SystemExit("Errore: manca RECORD_TO_EDIT in credentials.env")
+        raise SystemExit("Errore: manca RECORD_TO_EDIT")
 
     if not zone_name:
         zone_name = derive_zone_name(record_name)
@@ -43,7 +55,7 @@ def load_settings():
 
     proxy = proxy_value not in {"0", "false", "no", "off"}
 
-    return api_token, record_name, zone_name, ttl, proxy, ip_check_url, check_interval
+    return auth, record_name, zone_name, ttl, proxy, ip_check_url, check_interval
 
 
 def derive_zone_name(record_name):
@@ -73,17 +85,21 @@ def fetch_public_ipv4(ip_check_url):
     return ip
 
 
-def cf_request(method, path, api_token, payload=None, params=None):
+def cf_request(method, path, auth, payload=None, params=None):
     base_url = "https://api.cloudflare.com/client/v4"
     url = base_url + path
     if params:
         url = f"{url}?{urlencode(params)}"
 
     data = None
-    headers = {
-        "Authorization": f"Bearer {api_token}",
-        "Content-Type": "application/json",
-    }
+    headers = {"Content-Type": "application/json"}
+    if auth["type"] == "token":
+        headers["Authorization"] = f"Bearer {auth['value']}"
+        print(f"[DEBUG] Sending request with Bearer token auth")
+    else:
+        headers["X-Auth-Key"] = auth["key"]
+        headers["X-Auth-Email"] = auth["email"]
+        print(f"[DEBUG] Sending request with Key/Email auth ({auth['email']})")
 
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
@@ -101,29 +117,30 @@ def cf_request(method, path, api_token, payload=None, params=None):
 
     if not result.get("success", False):
         errors = result.get("errors", [])
+        print(f"[DEBUG] Full response: {result}")
         raise SystemExit(f"Cloudflare API failure: {errors}")
 
     return result.get("result")
 
 
-def get_zone_id(api_token, zone_name):
-    zones = cf_request("GET", "/zones", api_token, params={"name": zone_name, "status": "active"})
+def get_zone_id(auth, zone_name):
+    zones = cf_request("GET", "/zones", auth, params={"name": zone_name, "status": "active"})
     if not zones:
         raise SystemExit(f"Impossibile trovare la zona Cloudflare: {zone_name}")
     return zones[0]["id"]
 
 
-def get_dns_record(api_token, zone_id, record_name):
+def get_dns_record(auth, zone_id, record_name):
     records = cf_request(
         "GET",
         f"/zones/{zone_id}/dns_records",
-        api_token,
+        auth,
         params={"type": "A", "name": record_name},
     )
     return records[0] if records else None
 
 
-def create_dns_record(api_token, zone_id, record_name, ip_address, ttl, proxied):
+def create_dns_record(auth, zone_id, record_name, ip_address, ttl, proxied):
     payload = {
         "type": "A",
         "name": record_name,
@@ -131,12 +148,12 @@ def create_dns_record(api_token, zone_id, record_name, ip_address, ttl, proxied)
         "ttl": ttl,
         "proxied": proxied,
     }
-    record = cf_request("POST", f"/zones/{zone_id}/dns_records", api_token, payload=payload)
+    record = cf_request("POST", f"/zones/{zone_id}/dns_records", auth, payload=payload)
     print(f"Creato record A {record_name} -> {ip_address} (proxy={'ON' if proxied else 'OFF'})")
     return record
 
 
-def update_dns_record(api_token, zone_id, record_id, record_name, ip_address, ttl, proxied):
+def update_dns_record(auth, zone_id, record_id, record_name, ip_address, ttl, proxied):
     payload = {
         "type": "A",
         "name": record_name,
@@ -144,24 +161,26 @@ def update_dns_record(api_token, zone_id, record_id, record_name, ip_address, tt
         "ttl": ttl,
         "proxied": proxied,
     }
-    record = cf_request("PUT", f"/zones/{zone_id}/dns_records/{record_id}", api_token, payload=payload)
+    record = cf_request("PUT", f"/zones/{zone_id}/dns_records/{record_id}", auth, payload=payload)
     print(f"Aggiornato record A {record_name} -> {ip_address} (proxy={'ON' if proxied else 'OFF'})")
     return record
 
 
 def main():
-    api_token, record_name, zone_name, ttl, proxied, ip_check_url, check_interval = load_settings()
-    zone_id = get_zone_id(api_token, zone_name)
+    auth, record_name, zone_name, ttl, proxied, ip_check_url, check_interval = load_settings()
+    print(f"[DEBUG] Cloudflare auth mode: {auth['type']}")
+    print(f"[DEBUG] Zone: {zone_name}, Record: {record_name}")
+    zone_id = get_zone_id(auth, zone_name)
 
     try:
         while True:
             public_ip = fetch_public_ipv4(ip_check_url)
             print(f"IP pubblico rilevato: {public_ip}")
 
-            current_record = get_dns_record(api_token, zone_id, record_name)
+            current_record = get_dns_record(auth, zone_id, record_name)
 
             if current_record is None:
-                create_dns_record(api_token, zone_id, record_name, public_ip, ttl, proxied)
+                create_dns_record(auth, zone_id, record_name, public_ip, ttl, proxied)
             else:
                 current_ip = current_record.get("content")
                 current_proxied = current_record.get("proxied", False)
@@ -171,7 +190,7 @@ def main():
                     print("Il record è già aggiornato. Nessuna modifica necessaria.")
                 else:
                     update_dns_record(
-                        api_token,
+                        auth,
                         zone_id,
                         current_record["id"],
                         record_name,
