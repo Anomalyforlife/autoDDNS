@@ -12,9 +12,7 @@ from dotenv import load_dotenv
 def load_settings():
     env_path = os.path.join(os.path.dirname(__file__), "credentials.env")
     if os.path.isfile(env_path):
-        load_dotenv(dotenv_path=env_path)
-    else:
-        load_dotenv()
+        load_dotenv(dotenv_path=env_path, override=False)
 
     api_token = os.getenv("CLOUDFLARE_API", "").strip()
     record_name = os.getenv("RECORD_TO_EDIT", "").strip()
